@@ -1,12 +1,11 @@
 from enum import Enum
 from textwrap import dedent
-from typing import Any, Iterable, List
+from typing import Any, Iterable, List, Set
 
 LPAREN = "("
 RPAREN = ")"
-PIPE = "|"
 FOLD = ">"
-USU_SYNTAX = frozenset((LPAREN, RPAREN, PIPE, FOLD))
+USU_SYNTAX = frozenset((LPAREN, RPAREN))
 USU_NEWLINE = ("\r", "\n")
 QUOTES = frozenset(('"', "'", "`"))
 TRUE = frozenset(("True", "true"))
@@ -24,6 +23,11 @@ class TT(Enum):
     FLOAT = "float"
     SYNTAX = "syntax"
     KEY = "key"
+
+
+class Flags(Enum):
+    INLINE = 1
+    FOLD = 2
 
 
 class Token:
@@ -73,12 +77,12 @@ def lex_number() -> Token:
     pass
 
 
-def lex_value(src: str, inline: bool, tokens: List[Token]) -> List[Token]:
+def lex_value(src: str, flags: Set[Flags], tokens: List[Token]) -> List[Token]:
     pos = 0
     src = dedent(src)
-    if fold := tokens[-1].value == FOLD:
+
+    if fold := Flags.FOLD in flags:
         src = src.replace("\n", " ")
-        tokens.pop(-1)
 
     list_mode = "(" in [t.value for t in tokens[-1:]]
     if src[pos] not in {*DIGITS, *QUOTES} and not list_mode:
@@ -118,8 +122,7 @@ def lex_value(src: str, inline: bool, tokens: List[Token]) -> List[Token]:
                 tokens.append(Token(TT.INT, int(num)))
 
         else:
-            end_chars = USU_WS if (inline or fold) else USU_NEWLINE
-            print(end_chars)
+            end_chars = USU_WS if {Flags.INLINE, Flags.FOLD} & flags else USU_NEWLINE
             string = ""
             for c in src[pos:]:
                 if c in end_chars:
@@ -137,8 +140,8 @@ def lex_value(src: str, inline: bool, tokens: List[Token]) -> List[Token]:
 
 
 def lex(src: str):
-    inline = False
     tokens = []
+    flags: Set[Flags] = set()
     pos = 0
     src = dedent(src)
     pos = skip_chars(src, pos, USU_WS)
@@ -149,17 +152,24 @@ def lex(src: str):
         except IndexError:
             break
 
-        if c in USU_NEWLINE:
-            inline = False
+        if c in {*USU_NEWLINE, RPAREN}:
+            flags = flags - {Flags.INLINE}
+
+        if c == FOLD:
+            flags = flags | {Flags.FOLD}
+
+        if c in {*USU_SYNTAX, ":"}:
+            flags = flags - {Flags.FOLD}
+
+        if c == LPAREN:
+            flags = flags | {Flags.INLINE}
+
+        if c in {*USU_NEWLINE, FOLD}:
+            pos += 1
+            continue
 
         elif c in USU_SYNTAX:
             tokens.append(Token(TT.SYNTAX, c))
-
-            if c == RPAREN:
-                inline = False
-
-            elif c == LPAREN:
-                inline = True
 
         elif c == ":":
             key = ""
@@ -189,7 +199,7 @@ def lex(src: str):
 
             value = value.lstrip("\n").rstrip()
             if value:
-                tokens = lex_value(value, inline=inline, tokens=tokens)
+                tokens = lex_value(value, flags=flags, tokens=tokens)
 
         pos += 1
 
