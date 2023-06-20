@@ -20,29 +20,6 @@ def test_nested_map():
     )
 
 
-def test_multiline_list():
-    assert ["each line", "is it's own", "string"] == loads(
-        """
-        (|
-            each line
-            is it's own
-            string
-        )
-        """
-    )
-
-
-def test_multiline_unquoted_string():
-    assert {"string": "this string should have all newlines removed"} == loads(
-        """(
-              :string
-                this string should
-                have all newlines removed
-           )
-        """
-    )
-
-
 def test_list_of_maps():
     assert [{"id": "foo", "value": "bar"}, {"id": "bar", "value": "foo"}] == loads(
         """

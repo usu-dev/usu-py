@@ -5,6 +5,8 @@ from typing import Any, Iterable, List
 LPAREN = "("
 RPAREN = ")"
 PIPE = "|"
+FOLD = ">"
+USU_SYNTAX = frozenset((LPAREN, RPAREN, PIPE, FOLD))
 USU_NEWLINE = ("\r", "\n")
 QUOTES = frozenset(('"', "'", "`"))
 TRUE = frozenset(("True", "true"))
@@ -74,15 +76,16 @@ def lex_number() -> Token:
 def lex_value(src: str, inline: bool, tokens: List[Token]) -> List[Token]:
     pos = 0
     src = dedent(src)
-    if newline_mode := tokens[-1].value == PIPE:
+    if fold := tokens[-1].value == FOLD:
+        src = src.replace("\n", " ")
         tokens.pop(-1)
 
     list_mode = "(" in [t.value for t in tokens[-1:]]
     if src[pos] not in {*DIGITS, *QUOTES} and not list_mode:
-        if newline_mode:
+        if not fold:
             tokens.append(lex_str_bool(src))
         else:
-            tokens.append(lex_str_bool(src.lstrip().replace("\n", " ")))
+            tokens.append(lex_str_bool(src.lstrip()))
         return tokens
 
     while pos < len(src):
@@ -113,7 +116,8 @@ def lex_value(src: str, inline: bool, tokens: List[Token]) -> List[Token]:
                 tokens.append(Token(TT.INT, int(num)))
 
         else:
-            end_chars = USU_WS if inline else USU_NEWLINE
+            end_chars = USU_WS if (inline or fold) else USU_NEWLINE
+            print(end_chars)
             string = ""
             for c in src[pos:]:
                 if c in end_chars:
@@ -146,16 +150,14 @@ def lex(src: str):
         if c in USU_NEWLINE:
             inline = False
 
-        if c == LPAREN:
+        elif c in USU_SYNTAX:
             tokens.append(Token(TT.SYNTAX, c))
-            inline = True
 
-        elif c == RPAREN:
-            tokens.append(Token(TT.SYNTAX, c))
-            inline = False
+            if c == RPAREN:
+                inline = False
 
-        elif c == PIPE:
-            tokens.append(Token(TT.SYNTAX, c))
+            elif c == LPAREN:
+                inline = True
 
         elif c == ":":
             key = ""
