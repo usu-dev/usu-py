@@ -50,7 +50,7 @@ def test_multiline_unquoted_string():
 
 def test_unquoted_multiline_string():
     assert {
-        "unquoted-w-newlines": "This string uses its newline\nso who am I to argue?"
+        "unquoted-w-newlines": "This string uses its newline\nso who am I to argue?\n"
     } == loads(
         """
         (

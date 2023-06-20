@@ -62,7 +62,7 @@ def lex_str_bool(string: str) -> Token:
     elif string in FALSE:
         return Token(TT.BOOL, False)
     else:
-        return Token(TT.STR, string.strip())
+        return Token(TT.STR, string)
 
 
 def lex_str() -> Token:
@@ -83,6 +83,8 @@ def lex_value(src: str, inline: bool, tokens: List[Token]) -> List[Token]:
     list_mode = "(" in [t.value for t in tokens[-1:]]
     if src[pos] not in {*DIGITS, *QUOTES} and not list_mode:
         if not fold:
+            if src.lower() not in {*TRUE, *FALSE} and "\n" in src:
+                src = src.strip() + "\n"
             tokens.append(lex_str_bool(src))
         else:
             tokens.append(lex_str_bool(src.lstrip()))
