@@ -11,7 +11,7 @@
     )
     :dynamic (version)
     :dependencies ()
-    :requires-python ">= 3.8"
+    :requires-python '>= 3.8'
     :readme README.md
     :license (:text MIT)
   )
@@ -24,8 +24,8 @@
       )
     )
     :ruff (
-      :select (F E W `I001`)
-      :per-file-ignores (:src/usu/__init__.py ('E401'))
+      :select (F E W I001)
+      :per-file-ignores (:src/usu/__init__.py (E401))
     )
   )
 )
