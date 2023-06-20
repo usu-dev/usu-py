@@ -4,7 +4,11 @@ from typing import Any, Iterable, List
 
 LPAREN = "("
 RPAREN = ")"
+PIPE = "|"
 USU_NEWLINE = ("\r", "\n")
+QUOTES = frozenset(('"', "'", "`"))
+TRUE = frozenset(("True", "true"))
+FALSE = frozenset(("False", "false"))
 USU_WS = frozenset((" ", "\t", *USU_NEWLINE))
 DIGITS = frozenset((str(d) for d in range(0, 10)))
 
@@ -12,6 +16,7 @@ DIGITS = frozenset((str(d) for d in range(0, 10)))
 class TT(Enum):
     """Token Kind"""
 
+    BOOL = "bool"
     STR = "str"
     INT = "int"
     FLOAT = "float"
@@ -49,21 +54,46 @@ def skip_comment(src: str, pos: int) -> int:
     return pos
 
 
-def lex_value(src: str, inline: bool, last: Token) -> List[Token]:
+def lex_str_bool(string: str) -> Token:
+    if string in TRUE:
+        return Token(TT.BOOL, True)
+    elif string in FALSE:
+        return Token(TT.BOOL, False)
+    else:
+        return Token(TT.STR, string.strip())
+
+
+def lex_str() -> Token:
+    pass
+
+
+def lex_number() -> Token:
+    pass
+
+
+def lex_value(src: str, inline: bool, tokens: List[Token]) -> List[Token]:
     pos = 0
-    tokens = []
+    src = dedent(src)
+    if newline_mode := tokens[-1].value == PIPE:
+        tokens.pop(-1)
+
+    list_mode = "(" in [t.value for t in tokens[-1:]]
+    if src[pos] not in {*DIGITS, *QUOTES} and not list_mode:
+        if newline_mode:
+            tokens.append(lex_str_bool(src))
+        else:
+            tokens.append(lex_str_bool(src.lstrip().replace("\n", " ")))
+        return tokens
+
     while pos < len(src):
-        if src[pos] in ('"', "'", "`"):
+        if (quote := src[pos]) in QUOTES:
             string = ""
-            quote_char = src[pos]
             for c in src[pos + 1 :]:
-                if c == quote_char:
-                    pos += 1
+                pos += 1
+                if c == quote:
                     break
                 string += c
-                pos += 1
-            if quote_char == "`":
-                string = dedent(string.lstrip("\n"))
+            string = dedent(string.lstrip("\n"))
 
             tokens.append(Token(TT.STR, string))
 
@@ -82,10 +112,6 @@ def lex_value(src: str, inline: bool, last: Token) -> List[Token]:
             else:
                 tokens.append(Token(TT.INT, int(num)))
 
-        elif last.value != LPAREN:
-            tokens.append(Token(TT.STR, src.replace("\n", " ")))
-            break
-
         else:
             end_chars = USU_WS if inline else USU_NEWLINE
             string = ""
@@ -94,11 +120,13 @@ def lex_value(src: str, inline: bool, last: Token) -> List[Token]:
                     break
                 string += c
                 pos += 1
-            if string:
-                tokens.append(Token(TT.STR, string))
+
+            if not string:
+                pos += 1
+                continue
+            tokens.append(lex_str_bool(string.strip()))
 
         pos += 1
-
     return tokens
 
 
@@ -115,6 +143,9 @@ def lex(src: str):
         except IndexError:
             break
 
+        if c in USU_NEWLINE:
+            inline = False
+
         if c == LPAREN:
             tokens.append(Token(TT.SYNTAX, c))
             inline = True
@@ -123,8 +154,8 @@ def lex(src: str):
             tokens.append(Token(TT.SYNTAX, c))
             inline = False
 
-        elif c in USU_NEWLINE:
-            inline = False
+        elif c == PIPE:
+            tokens.append(Token(TT.SYNTAX, c))
 
         elif c == ":":
             key = ""
@@ -152,11 +183,9 @@ def lex(src: str):
                 value += c
                 pos += 1
 
-            value = value.rstrip("\n").rstrip()
+            value = value.lstrip("\n").rstrip()
             if value:
-                if not inline:
-                    value = dedent(value)
-                tokens.extend(lex_value(value, inline=inline, last=tokens[-1]))
+                tokens = lex_value(value, inline=inline, tokens=tokens)
 
         pos += 1
 

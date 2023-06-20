@@ -16,6 +16,7 @@ def parse_map(tokens: List[Token]):
 
     while True:
         key = tokens.pop(0).value
+
         value, tokens = parse(tokens)
 
         # TODO: only accept unique keys
@@ -56,5 +57,6 @@ def parse(tokens: List[Token], root: bool = False) -> List | Dict[str, Any]:
             return parse_map(tokens)
         else:
             return parse_list(tokens)
+
     else:
         return t.value, tokens

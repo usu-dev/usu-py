@@ -9,6 +9,11 @@ def test_basic_list():
     assert [1, 2, 3, 4, 5] == loads("(1 2 3 4 5)")
 
 
+def test_bool():
+    assert dict(key=True) == loads("(:key true)")
+    assert dict(key=False) == loads("(:key False)")
+
+
 def test_nested_map():
     assert {"level-one": {"level-two": "value"}} == loads(
         "(:level-one (:level-two value))"
@@ -18,7 +23,7 @@ def test_nested_map():
 def test_multiline_list():
     assert ["each line", "is it's own", "string"] == loads(
         """
-        (
+        (|
             each line
             is it's own
             string
