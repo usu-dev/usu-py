@@ -203,4 +203,7 @@ def lex(src: str):
 
         pos += 1
 
+    if tokens[0].kind == TT.KEY:
+        tokens = [Token(TT.SYNTAX, "("), *tokens, Token(TT.SYNTAX, ")")]
+
     return tokens
