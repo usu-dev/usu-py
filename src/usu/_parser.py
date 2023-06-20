@@ -17,9 +17,14 @@ def parse_map(tokens: List[Token]):
     while True:
         key = tokens.pop(0).value
 
+        if next.kind == TT.KEY:
+            UsuDecodeError(f"Missing value for key: {key}")
+
         value, tokens = parse(tokens)
 
-        # TODO: only accept unique keys
+        if key in usu_map:
+            UsuDecodeError(f"Keys must be unique, found duplicate entries for {key}")
+
         usu_map[key] = value
 
         t = tokens[0]
@@ -46,17 +51,21 @@ def parse_list(tokens):
 
 
 def parse(tokens: List[Token], root: bool = False) -> List | Dict[str, Any]:
+    if tokens and tokens[0].value == RPAREN:
+        raise UsuDecodeError("Unexpected closing paranthesis encountered")
+
     t = tokens.pop(0)
     next = tokens[0]
 
     if root and t.value != LPAREN:
         raise UsuDecodeError("Expected document to begin with left parenthesis")
 
-    if t.value == LPAREN:
-        if next.kind == TT.KEY:
-            return parse_map(tokens)
-        else:
-            return parse_list(tokens)
-
-    else:
+    if t.kind not in {TT.KEY, TT.SYNTAX}:
         return t.value, tokens
+
+    if next.kind == TT.KEY:
+        value, tokens = parse_map(tokens)
+    else:
+        value, tokens = parse_list(tokens)
+
+    return value, tokens

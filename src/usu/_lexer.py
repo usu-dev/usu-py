@@ -191,7 +191,7 @@ def lex(src: str):
         else:
             value = ""
             for c in src[pos:]:
-                if c in (*RPAREN, ":", "#"):
+                if c in (*USU_SYNTAX, ":", "#"):
                     pos -= 1
                     break
                 value += c
