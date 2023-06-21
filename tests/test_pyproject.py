@@ -9,7 +9,7 @@ import usu
 
 PATHS = (
     (tomllib, Path(__file__).parent.parent / "pyproject.toml"),
-    (usu, Path(__file__).parent / "pyproject.usu"),
+    (usu, Path(__file__).parent.parent / "pyproject.usu"),
 )
 
 
