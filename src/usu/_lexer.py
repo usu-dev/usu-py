@@ -27,6 +27,7 @@ class TK(Enum):
     STR = "str"
     INT = "int"
     FLOAT = "float"
+    NULL = "null"
     SYNTAX = "syntax"
     KEY = "key"
 
@@ -66,11 +67,13 @@ def skip_comment(src: str, pos: int) -> int:
     return pos
 
 
-def lex_str_bool(string: str) -> Token:
+def lex_str_bool_null(string: str) -> Token:
     if string in TRUE:
         return Token(TK.BOOL, True)
     elif string in FALSE:
         return Token(TK.BOOL, False)
+    elif string == "null":
+        return Token(TK.NULL, None)
     else:
         return Token(TK.STR, string)
 
@@ -157,7 +160,7 @@ def lex_value(pos, src: str, flags: Set[Flags], tokens: List[Token]) -> List[Tok
         else:
             pos, string = lex_unquoted_str(pos, src, flags, inside_list)
             if string:
-                tokens.append(lex_str_bool(string))
+                tokens.append(lex_str_bool_null(string))
         pos += 1
     pos -= 1
     return pos, tokens
