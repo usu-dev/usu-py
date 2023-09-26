@@ -1,11 +1,17 @@
+from __future__ import annotations
+
 from enum import Enum
 from textwrap import dedent
 from typing import Any, Iterable, List, Set
 
-LPAREN = "("
-RPAREN = ")"
+from ._errors import UsuDecodeError
+
+MOPEN = "{"
+MCLOSE = "}"
+LOPEN = "["
+LCLOSE = "]"
 FOLD = ">"
-USU_SYNTAX = frozenset((LPAREN, RPAREN))
+USU_SYNTAX = frozenset((MOPEN, MCLOSE, LOPEN, LCLOSE))
 USU_NEWLINE = ("\r", "\n")
 QUOTES = frozenset(('"', "'", "`"))
 TRUE = frozenset(("True", "true"))
@@ -14,7 +20,7 @@ USU_WS = frozenset((" ", "\t", *USU_NEWLINE))
 DIGITS = frozenset((str(d) for d in range(0, 10)))
 
 
-class TT(Enum):
+class TK(Enum):
     """Token Kind"""
 
     BOOL = "bool"
@@ -31,7 +37,7 @@ class Flags(Enum):
 
 
 class Token:
-    def __init__(self, kind: TT, value: Any):
+    def __init__(self, kind: TK, value: Any):
         self.kind = kind
         self.value = value
 
@@ -62,81 +68,99 @@ def skip_comment(src: str, pos: int) -> int:
 
 def lex_str_bool(string: str) -> Token:
     if string in TRUE:
-        return Token(TT.BOOL, True)
+        return Token(TK.BOOL, True)
     elif string in FALSE:
-        return Token(TT.BOOL, False)
+        return Token(TK.BOOL, False)
     else:
-        return Token(TT.STR, string)
+        return Token(TK.STR, string)
 
 
-def lex_str() -> Token:
-    pass
+def lex_quoted_str(pos, src, end_char):
+    string = ""
+    pos += 1
+    while True:
+        try:
+            c = src[pos]
+        except IndexError:
+            raise UsuDecodeError("Quoted string literal missing final quote")
 
-
-def lex_number() -> Token:
-    pass
-
-
-def lex_value(src: str, flags: Set[Flags], tokens: List[Token]) -> List[Token]:
-    pos = 0
-    src = dedent(src)
-
-    if fold := Flags.FOLD in flags:
-        src = src.replace("\n", " ")
-
-    list_mode = "(" in [t.value for t in tokens[-1:]]
-    if src[pos] not in {*DIGITS, *QUOTES} and not list_mode:
-        if not fold:
-            if src.lower() not in {*TRUE, *FALSE} and "\n" in src:
-                src = src.strip() + "\n"
-            tokens.append(lex_str_bool(src))
-        else:
-            tokens.append(lex_str_bool(src.lstrip()))
-        return tokens
-
-    while pos < len(src):
-        if (quote := src[pos]) in QUOTES:
-            string = ""
-            for c in src[pos + 1 :]:
-                pos += 1
-                if c == quote:
-                    break
-                string += c
+        if c == end_char:
             string = dedent(string.lstrip("\n"))
+            return pos, Token(TK.STR, string)
 
-            tokens.append(Token(TT.STR, string))
-
-        elif src[pos] in DIGITS:
-            num = ""
-            for c in src[pos:]:
-                num += c
-
-                if c in USU_WS:
-                    break
-
-                pos += 1
-
-            if "." in num:
-                tokens.append(Token(TT.FLOAT, float(num)))
-            else:
-                tokens.append(Token(TT.INT, int(num)))
-
-        else:
-            end_chars = USU_WS if {Flags.INLINE, Flags.FOLD} & flags else USU_NEWLINE
-            string = ""
-            for c in src[pos:]:
-                if c in end_chars:
-                    break
-                string += c
-                pos += 1
-
-            if not string:
-                pos += 1
-                continue
-            tokens.append(lex_str_bool(string.strip()))
-
+        if c == "\\":
+            pos += 1
+            c = src[pos]
+        string += c
         pos += 1
-    return tokens
+
+
+def lex_unquoted_str(pos, src, flags, inside_list):
+    string = ""
+    end_chars = {*USU_SYNTAX, ":", "#"}
+    if inside_list:
+        end_chars |= {*USU_NEWLINE}
+    if {Flags.FOLD, Flags.INLINE} & flags and inside_list:
+        end_chars |= USU_WS
+    preceed = src[pos - 1]
+    for c in src[pos:]:
+        if c in end_chars:
+            if c in {":", *USU_SYNTAX, "#"}:
+                pos -= 1
+            break
+
+        string += c
+        pos += 1
+
+    string = dedent(string.rstrip(" " if preceed == "\n" else " \n\t")).lstrip()
+    if Flags.FOLD in flags:
+        string = string.replace("\n", " ").strip()
+    return pos, string
+
+
+def lex_number(pos, src) -> Token:
+    num = ""
+    for c in src[pos:]:
+        if c in {*USU_WS, LCLOSE, MCLOSE}:
+            pos -= 1
+            break
+        else:
+            num += c
+        pos += 1
+
+    if "." in num:
+        token = Token(TK.FLOAT, float(num))
+    else:
+        token = Token(TK.INT, int(num))
+
+    return pos, token
+
+
+def lex_value(pos, src: str, flags: Set[Flags], tokens: List[Token]) -> List[Token]:
+    inside_list = LOPEN in (t.value for t in tokens[-2:])
+    while True:
+        if inside_list:
+            pos = skip_chars(src, pos, USU_WS)
+        try:
+            c = src[pos]
+        except IndexError:
+            break
+
+        if c in {*USU_SYNTAX, ":", "#"}:
+            break
+        elif c in QUOTES:
+            pos, token = lex_quoted_str(pos, src, c)
+            tokens.append(token)
+        elif c in {*DIGITS, "-"}:
+            pos, token = lex_number(pos, src)
+            tokens.append(token)
+        else:
+            pos, string = lex_unquoted_str(pos, src, flags, inside_list)
+            if string:
+                tokens.append(lex_str_bool(string))
+        pos += 1
+    pos -= 1
+    return pos, tokens
 
 
 def lex(src: str):
@@ -152,58 +176,53 @@ def lex(src: str):
         except IndexError:
             break
 
-        if c in {*USU_NEWLINE, RPAREN}:
-            flags = flags - {Flags.INLINE}
+        if c in {*USU_NEWLINE}:
+            flags -= {Flags.INLINE}
 
         if c == FOLD:
-            flags = flags | {Flags.FOLD}
+            flags |= {Flags.FOLD}
 
         if c in {*USU_SYNTAX, ":"}:
-            flags = flags - {Flags.FOLD}
-
-        if c == LPAREN:
-            flags = flags | {Flags.INLINE}
+            flags -= {Flags.FOLD}
 
         if c in {*USU_NEWLINE, FOLD}:
             pos += 1
             continue
 
+        if c in {MOPEN, LOPEN}:
+            flags |= {Flags.INLINE}
+            tokens.append(Token(TK.SYNTAX, c))
+            pos = skip_chars(src, pos + 1, {" ", "\t"})
+            continue
+
         elif c in USU_SYNTAX:
-            tokens.append(Token(TT.SYNTAX, c))
+            tokens.append(Token(TK.SYNTAX, c))
 
         elif c == ":":
             key = ""
-            while (c := src[pos + 1]) not in {*USU_WS, RPAREN}:
+            while (c := src[pos + 1]) not in {*USU_WS, MCLOSE}:
                 key += c
                 pos += 1
 
             pos += 1
-            if c != RPAREN:
-                key = key
-                tokens.append(Token(TT.KEY, key))
+            # NOTE: I think this code is outdated
+            if c != MCLOSE:
+                tokens.append(Token(TK.KEY, key))
             else:
-                tokens.append(Token(TT.KEY, None))
-                tokens.append(Token(TT.SYNTAX, RPAREN))
+                tokens.append(Token(TK.KEY, None))
+                tokens.append(Token(TK.SYNTAX, MCLOSE))
 
         elif c == "#":
             pos = skip_comment(src, pos)
 
         else:
-            value = ""
-            for c in src[pos:]:
-                if c in (*USU_SYNTAX, ":", "#"):
-                    pos -= 1
-                    break
-                value += c
-                pos += 1
-
-            value = value.lstrip("\n").rstrip()
-            if value:
-                tokens = lex_value(value, flags=flags, tokens=tokens)
+            pos, tokens = lex_value(pos, src, flags=flags, tokens=tokens)
 
         pos += 1
 
-    if tokens[0].kind == TT.KEY:
-        tokens = [Token(TT.SYNTAX, "("), *tokens, Token(TT.SYNTAX, ")")]
+    if tokens[-1].kind not in {TK.KEY, TK.SYNTAX}:
+        pos = skip_chars(src, pos, USU_WS)
 
+    if tokens[0].kind == TK.KEY:
+        tokens = [Token(TK.SYNTAX, "{"), *tokens, Token(TK.SYNTAX, "}")]
     return tokens
