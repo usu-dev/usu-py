@@ -26,6 +26,7 @@
      'pre-commit>=3.3.3'
      'mypy>=1.3.0'
      'tomli_w'
+     'pyyaml'
     ]
     :test [
       'pytest>=7.3.2'

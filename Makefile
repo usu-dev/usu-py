@@ -1,3 +1,6 @@
-pyproject.toml: pyproject.usu scripts/make_pyproject_toml.py
-	./scripts/make_pyproject_toml.py
+pyproject.toml: pyproject.usu
+	./scripts/usu-converter $< $@
+
+.github/workflows/%.yml: .github/workflows/%.usu
+	./scripts/usu-converter $< $@
 
